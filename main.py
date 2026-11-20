@@ -1,8 +1,6 @@
 import mysql.connector
 
 
-DATABASE_NAME = "library_db"
-
 MENU = """
 LIBRARY MANAGEMENT SYSTEM
 1. Add Book
@@ -17,9 +15,9 @@ LIBRARY MANAGEMENT SYSTEM
 
 def initialise_database(connection, cursor):
     cursor.execute("SHOW DATABASES")
-    if (DATABASE_NAME,) not in cursor.fetchall():
-        cursor.execute("CREATE DATABASE " + DATABASE_NAME)
-    cursor.execute("USE " + DATABASE_NAME)
+    if ("library_db",) not in cursor.fetchall():
+        cursor.execute("CREATE DATABASE library_db")
+    cursor.execute("USE library_db")
 
     cursor.execute("SHOW TABLES")
     tables = cursor.fetchall()
