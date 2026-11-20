@@ -2,7 +2,7 @@
 
 ## A. Application and environment
 
-The simplified CBSE Class XII project is a 269-line Python program with six operations. It was verified against live MySQL using Python 3.12.10, MySQL Server 8.0.46, and MySQL Connector/Python 26.10.0.
+The simplified CBSE Class XII project is a 285-line Python program with six operations. It was verified against live MySQL using Python 3.12.10, MySQL Server 8.0.46, and MySQL Connector/Python 26.10.0.
 
 Run the program with:
 
@@ -32,13 +32,14 @@ First-run setup creates the table and inserts ten sample books as `Available`, w
 | Scenario | Result | Observation |
 |---|---|---|
 | First launch and restart | PASS | MySQL contained one table and exactly ten sample books. Restarting preserved the original rows without reseeding. |
-| Add Book | PASS | Verified insertion and rejection of invalid IDs, blank fields, duplicate IDs, and case-variant duplicate titles. An oversized value produced a handled MySQL error and left the catalogue intact. |
+| Add Book | PASS | Add Book asks for the title, author, and category, then assigns and displays the next ID. Blank fields and case-variant duplicate titles were rejected. An oversized value produced a handled MySQL error and left the catalogue intact. |
 | View All Books | PASS | Displayed catalogue details, availability, and the borrower for an issued book. An empty catalogue displayed a message. |
 | Search Book | PASS | Found books by exact ID and by full or partial title, including case variations. Handled missing matches and invalid input. |
 | Issue Book | PASS | Set the status to `Issued` and saved the borrower. Rejected blank borrower names, repeat issues, and missing books. The status and borrower survived a restart. |
 | Return Book | PASS | Set the status to `Available` and cleared the borrower to SQL `NULL`. Rejected repeat returns and missing books. Both saved values survived a restart. |
 | Remove Book | PASS | Blocked removal of an issued book. Cancellation preserved the row, and confirmation removed the available book. |
 | Setup safeguards | PASS | An empty catalogue stayed empty. Unexpected tables and incompatible columns triggered setup errors and preserved the existing rows. |
+| Book ID ranges | PASS | The first two books added after setup received IDs 11 and 12. Lookup and borrowing operations use the current highest ID. Adding uses one above that ID, so it can reuse the most recently deleted highest ID. An empty catalogue starts at ID 1. |
 | Menu and source checks | PASS | Invalid menu choices were handled, option 7 exited, and Python compilation succeeded. |
 
 Title search uses standard SQL `LIKE` behaviour. The characters `%` and `_` act as wildcards.

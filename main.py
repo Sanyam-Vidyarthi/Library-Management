@@ -65,11 +65,6 @@ def setup_database(connection, cursor):
 
 
 def add_book(cursor):
-    book_id = int(input("Book ID: "))
-    if not 1 <= book_id <= 2147483647:
-        print("Enter a positive whole-number Book ID up to 2147483647.")
-        return
-
     title = input("Title: ").strip()
     author = input("Author: ").strip()
     category = input("Category: ").strip()
@@ -77,16 +72,25 @@ def add_book(cursor):
         print("Title, author and category are required.")
         return
 
-    cursor.execute("SELECT book_id FROM books WHERE book_id = %s OR title = %s", (book_id, title))
-    if cursor.fetchall():
-        print("A book with that ID or title already exists.")
+    cursor.execute("SELECT book_id FROM books WHERE title = %s", (title,))
+    if cursor.fetchone() is not None:
+        print("A book with that title already exists.")
         return
+
+    cursor.execute("SELECT MAX(book_id) FROM books")
+    highest_id = cursor.fetchone()[0]
+    if highest_id is None:
+        highest_id = 0
+    if highest_id == 2147483647:
+        print("The next Book ID is too large for MySQL.")
+        return
+    book_id = highest_id + 1
 
     cursor.execute("""
         INSERT INTO books (book_id, title, author, category, status, issued_to)
         VALUES (%s, %s, %s, %s, 'Available', NULL)
     """, (book_id, title, author, category))
-    return "Book added successfully."
+    return "Book added successfully. Book ID: " + str(book_id)
 
 
 def view_all_books(cursor):
@@ -102,12 +106,15 @@ def view_all_books(cursor):
             print("Issued to:", issued_to)
 
 
-def search_book(cursor):
+def search_book(cursor, highest_id):
     choice = input("Search by 1. Book ID or 2. Title: ").strip()
     if choice == "1":
-        book_id = int(input("Book ID: "))
-        if not 1 <= book_id <= 2147483647:
-            print("Enter a positive whole-number Book ID up to 2147483647.")
+        if highest_id == 0:
+            print("The catalogue is empty.")
+            return
+        book_id = int(input("Book ID (1 to " + str(highest_id) + "): "))
+        if not 1 <= book_id <= highest_id:
+            print("Enter a Book ID from 1 to", highest_id)
             return
         cursor.execute("SELECT * FROM books WHERE book_id = %s", (book_id,))
     elif choice == "2":
@@ -130,10 +137,10 @@ def search_book(cursor):
             print("Issued to:", issued_to)
 
 
-def issue_book(cursor):
-    book_id = int(input("Book ID: "))
-    if not 1 <= book_id <= 2147483647:
-        print("Enter a positive whole-number Book ID up to 2147483647.")
+def issue_book(cursor, highest_id):
+    book_id = int(input("Book ID (1 to " + str(highest_id) + "): "))
+    if not 1 <= book_id <= highest_id:
+        print("Enter a Book ID from 1 to", highest_id)
         return
 
     cursor.execute("SELECT status FROM books WHERE book_id = %s", (book_id,))
@@ -154,10 +161,10 @@ def issue_book(cursor):
     return "Book issued successfully."
 
 
-def return_book(cursor):
-    book_id = int(input("Book ID: "))
-    if not 1 <= book_id <= 2147483647:
-        print("Enter a positive whole-number Book ID up to 2147483647.")
+def return_book(cursor, highest_id):
+    book_id = int(input("Book ID (1 to " + str(highest_id) + "): "))
+    if not 1 <= book_id <= highest_id:
+        print("Enter a Book ID from 1 to", highest_id)
         return
 
     cursor.execute("SELECT status FROM books WHERE book_id = %s", (book_id,))
@@ -173,10 +180,10 @@ def return_book(cursor):
     return "Book returned successfully."
 
 
-def remove_book(cursor):
-    book_id = int(input("Book ID: "))
-    if not 1 <= book_id <= 2147483647:
-        print("Enter a positive whole-number Book ID up to 2147483647.")
+def remove_book(cursor, highest_id):
+    book_id = int(input("Book ID (1 to " + str(highest_id) + "): "))
+    if not 1 <= book_id <= highest_id:
+        print("Enter a Book ID from 1 to", highest_id)
         return
 
     cursor.execute("SELECT title, status FROM books WHERE book_id = %s", (book_id,))
@@ -226,18 +233,26 @@ LIBRARY MANAGEMENT SYSTEM
             choice = input("Enter your choice: ").strip()
             message = None
             try:
+                if choice in ("3", "4", "5", "6"):
+                    cursor.execute("SELECT MAX(book_id) FROM books")
+                    highest_id = cursor.fetchone()[0]
+                    if highest_id is None:
+                        highest_id = 0
+
                 if choice == "1":
                     message = add_book(cursor)
                 elif choice == "2":
                     view_all_books(cursor)
                 elif choice == "3":
-                    search_book(cursor)
+                    search_book(cursor, highest_id)
+                elif choice in ("4", "5", "6") and highest_id == 0:
+                    print("The catalogue is empty.")
                 elif choice == "4":
-                    message = issue_book(cursor)
+                    message = issue_book(cursor, highest_id)
                 elif choice == "5":
-                    message = return_book(cursor)
+                    message = return_book(cursor, highest_id)
                 elif choice == "6":
-                    message = remove_book(cursor)
+                    message = remove_book(cursor, highest_id)
                 elif choice == "7":
                     print("Goodbye.")
                     break
@@ -250,7 +265,8 @@ LIBRARY MANAGEMENT SYSTEM
                 if message is not None:
                     print(message)
             except ValueError:
-                print("Enter a positive whole-number Book ID up to 2147483647.")
+                print("Enter a positive whole-number Book ID.")
+                connection.rollback()
             except mysql.connector.Error as error:
                 connection.rollback()
                 print("MySQL error:", error)
