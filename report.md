@@ -1,48 +1,50 @@
-# Library Management System — Phase 2 Verification Report
+# Library Management System — Verification Report
 
-## A. Environment
+## A. Application and environment
 
-**Live MySQL verification succeeded.** All seven operations worked in their normal workflows. Title searches containing `%` or `_` returned extra matches.
+The simplified CBSE Class XII project is a 269-line Python program with six operations. It was verified against live MySQL using Python 3.12.10, MySQL Server 8.0.46, and MySQL Connector/Python 26.10.0.
 
-| Component | Result |
+Run the program with:
+
+~~~powershell
+py -3.12 main.py
+~~~
+
+Enter the username and password for your local MySQL server. First-run setup requires permission to create the database and table and insert the sample rows.
+
+## B. Database design
+
+The application uses the database `library_simple_db` and one InnoDB table named `books`.
+
+| Column | MySQL definition |
 |---|---|
-| Python | 3.12.10 |
-| MySQL Server | 8.0.46 on the existing Windows service |
-| MySQL Connector/Python | 26.10.0, installed for Python 3.12 |
-| Disposable databases | `libraryverifye68636cd95c7a` for the main suite, `libraryverifye68636cd95c7b` for the empty catalogue, and `libraryverifye68636cd95c7c` and `libraryverifye68636cd95c7d` for incomplete setup |
-| Isolation and cleanup | The temporary account had access only to the test schemas for application data. All four schemas and the account were removed. The SHA-256 hash of `main.py` matched before and after verification, and it remained the sole application file. |
+| `book_id` | `INT PRIMARY KEY` |
+| `title` | `VARCHAR(200)`, required and unique, with case-insensitive comparison |
+| `author` | `VARCHAR(120)`, required |
+| `category` | `VARCHAR(60)`, required |
+| `status` | `VARCHAR(10)`, required |
+| `issued_to` | `VARCHAR(120)`, nullable |
 
-## B. Test Results
+First-run setup creates the table and inserts ten sample books as `Available`, with a `NULL` borrower. Later launches preserve the existing rows and keep an intentionally empty catalogue empty. Unexpected tables or incompatible columns result in a setup error.
 
-Source inspection confirmed that startup prompts for credentials and uses `SHOW DATABASES` and `SHOW TABLES` to decide whether to initialize. Add, view, and search use parameterized lookups, an `INSERT`, and `LIKE`. Issue inserts the loan and updates availability. Return updates the loan and availability. The menu commits both writes together or rolls them back on a MySQL error. Borrowing history uses a join, and removal checks for history before `DELETE`. The input helpers validate IDs, required text, and calendar dates. A `finally` block closes the cursor and connection.
+## C. Live MySQL test results
 
-| Test category | Scenario | Result | Observation |
-|---|---|---|---|
-| Syntax only | Compile `main.py` under Python 3.12 | PASS | Compilation succeeded. |
-| Live MySQL · Setup | Fresh database, schema, sample data, menu and exit | PASS | Both InnoDB tables, primary keys, unique title, and foreign key were present. All ten sample rows matched the source. |
-| Live MySQL · Startup recovery | Restart, empty catalogue, and either table missing | PASS | Existing rows survived. The empty catalogue stayed empty. Each incomplete schema produced a setup error and preserved its surviving table and data. |
-| Live MySQL · A. Add Book | Valid insert, duplicates, blanks, and invalid IDs | PASS | SQL confirmed the inserted row. Duplicate IDs and case-variant titles were rejected. Blank fields were re-prompted. Letters, zero, negative, and out-of-range IDs were handled. |
-| Live MySQL · B. View All Books | Catalogue fields, availability, and empty output | PASS | Displayed details matched MySQL, including `Available` and `Issued` statuses. An empty catalogue produced the expected message. |
-| Live MySQL · C. Search / Locate | ID, title, partial and case-insensitive searches, location, and missing results | PASS | The expected books, racks, and shelves were shown. Missing results produced a clear message. |
-| Live MySQL · C. Search / Locate | Literal searches containing `%` or `_` | FAIL | `100%` also matched `1000 Atlas`, and `A_B` also matched `AXB Atlas`. |
-| Live MySQL · D. Issue Book | Valid, repeated, and nonexistent issues, plus date validation | PASS | SQL confirmed the student, class, issue date, and `Issued` status. Invalid formats, impossible dates, and non-leap February dates were rejected. Valid leap days were accepted. |
-| Live MySQL · E. Return Book | Same-day, earlier, invalid, repeated, and nonexistent returns | PASS | SQL confirmed the same-day return, restored availability, and preserved the borrowing record. Invalid attempts left the loan unchanged. |
-| Live MySQL · F. View Issue Records | Active and returned loans | PASS | Each loan showed the correct book and student. Active loans showed `Not Returned`, and closed loans showed their return dates. |
-| Live MySQL · G. Remove Book | Confirm, cancel, missing ID, and borrowing history | PASS | SQL confirmed deletion of an eligible book and preservation after cancellation. Both active and historical loans prevented deletion. |
-| Live MySQL · Transactions | Force the second write to fail during issue and return | PASS | MySQL rejected each status update. Direct queries confirmed rollback of the preceding loan insert or return-date update. |
-| Live MySQL · Persistence | Add, issue, restart, return, and restart again | PASS | Separate Python processes saw the saved book, open loan, completed return, and updated availability. |
-| Live MySQL · Menu validation | Invalid menu and search choices | PASS | The program displayed guidance and continued without an unhandled exception. |
+| Scenario | Result | Observation |
+|---|---|---|
+| First launch and restart | PASS | MySQL contained one table and exactly ten sample books. Restarting preserved the original rows without reseeding. |
+| Add Book | PASS | Verified insertion and rejection of invalid IDs, blank fields, duplicate IDs, and case-variant duplicate titles. An oversized value produced a handled MySQL error and left the catalogue intact. |
+| View All Books | PASS | Displayed catalogue details, availability, and the borrower for an issued book. An empty catalogue displayed a message. |
+| Search Book | PASS | Found books by exact ID and by full or partial title, including case variations. Handled missing matches and invalid input. |
+| Issue Book | PASS | Set the status to `Issued` and saved the borrower. Rejected blank borrower names, repeat issues, and missing books. The status and borrower survived a restart. |
+| Return Book | PASS | Set the status to `Available` and cleared the borrower to SQL `NULL`. Rejected repeat returns and missing books. Both saved values survived a restart. |
+| Remove Book | PASS | Blocked removal of an issued book. Cancellation preserved the row, and confirmation removed the available book. |
+| Setup safeguards | PASS | An empty catalogue stayed empty. Unexpected tables and incompatible columns triggered setup errors and preserved the existing rows. |
+| Menu and source checks | PASS | Invalid menu choices were handled, option 7 exited, and Python compilation succeeded. |
 
-The database results above came from live MySQL. Earlier in-memory results were excluded from this assessment.
+Title search uses standard SQL `LIKE` behaviour. The characters `%` and `_` act as wildcards.
 
-## C. Problems Found
+## D. Isolation and assessment
 
-**Literal title searches can return unrelated books.** In `search_book`, lines 162–164 place the entered text directly inside a `LIKE` pattern. MySQL interprets `%` and `_` as wildcards, which broadens the results when either character is meant literally. A small correction is to escape the chosen escape character, `%`, and `_` with `str.replace()`, then use an explicit `ESCAPE` clause while keeping the pattern parameterized. [Source at main.py line 164](D:/Tech/Library/main.py:164) · [MySQL `LIKE` documentation](https://dev.mysql.com/doc/refman/8.0/en/string-comparison-functions.html#operator_like)
+Live tests ran against disposable schemas with a temporary account restricted to those schemas. The schemas and account were removed after verification. All test writes were confined to those schemas, so the original `library_db` and its borrowing history were safe.
 
-## D. Database Integrity
-
-Live tests confirmed safe initialization in the tested fresh, complete, and incomplete states. Catalogue records and borrowing history survived restarts. Issue and return each rolled back cleanly when the second write failed, and removal respected both active and historical loans.
-
-## E. Final Assessment
-
-**CONDITIONAL PASS — Minor corrections recommended.** The normal workflows and database integrity checks passed on live MySQL. The remaining finding is limited to literal title searches containing wildcard characters.
+**PASS — The six simplified workflows passed live MySQL verification.** The previous two-table implementation is recoverable at commit `7534726`.
